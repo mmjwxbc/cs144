@@ -1,6 +1,7 @@
 #include "byte_stream.hh"
 #include <vector>
 #include <iostream>
+#include <algorithm>
 // Dummy implementation of a flow-controlled in-memory byte stream.
 
 // For Lab 0, please replace with a real implementation that passes the
@@ -14,17 +15,16 @@ void DUMMY_CODE(Targs &&... /* unused */) {}
 using namespace std;
 
 // ByteStream::ByteStream(const size_t capacity) {this->capacity = capacity; this->buffer = vector<unsigned char>(capacity)}
-ByteStream::ByteStream(const size_t cap) : capacity(cap), unused_capacity(cap), buffer(cap + 1), hh(0), tt(0) {}
+ByteStream::ByteStream(const size_t cap) : capacity(cap), unused_capacity(cap), buffer(){}
 
 size_t ByteStream::write(const string &data) {
-    size_t cnt = 0;
-    for(size_t i = 0; i < data.size() && this->unused_capacity; i++) {
-        cnt++;
-        this->buffer[this->tt] = data[i];
-        // cout << "write char (" << data[i] << ")" << endl;
-        this->tt = (this->tt + 1) % (this->capacity + 1);
-        this->unused_capacity --;
-        this->w_bytes ++;
+    if (_end)
+        return 0;
+    size_t write_size = min(data.size(), unused_capacity);
+    w_bytes += write_size;
+    this->unused_capacity -= write_size;
+    for(size_t i = 0; i < write_size; i++) {
+        this->buffer.push_back(data[i]);
     }
     // cout << "unused_capacity = " << this->unused_capacity << endl;
     // for(int i = 0; i < this->buffer.size(); i++)
@@ -33,23 +33,22 @@ size_t ByteStream::write(const string &data) {
     // cout << buffer.size() << endl;
     // cout << this->unused_capacity << endl;
     // cout << this->capacity << endl;
-    return cnt;
+    return write_size;
 }
 
 //! \param[in] len bytes will be copied from the output side of the buffer
 string ByteStream::peek_output(const size_t len) const {
-    string output = "";
-    for(size_t i = 0; i < len && i < (this->capacity - this->unused_capacity); i++) {
-        output += this->buffer[(this->hh + i) % (this->capacity + 1)];
-    }
-    return output;
+    size_t pop_size = min(len, buffer.size());
+    return string(buffer.begin(), buffer.begin() + pop_size);
 }
 
 //! \param[in] len bytes will be removed from the output side of the buffer
 void ByteStream::pop_output(const size_t len) {
-    this->hh += len;
     this->unused_capacity += len;
     this->r_bytes+=len;
+    for(size_t i = 0; i < len; i++) {
+        buffer.pop_front();
+    }
 }
 
 //! Read (i.e., copy and then pop) the next "len" bytes of the stream
@@ -66,11 +65,11 @@ void ByteStream::end_input() {this->_end = true;}
 
 bool ByteStream::input_ended() const { return this->_end; }
 
-size_t ByteStream::buffer_size() const { return this->capacity - this->unused_capacity; }
+size_t ByteStream::buffer_size() const { return buffer.size(); }
 
-bool ByteStream::buffer_empty() const { return this->unused_capacity == this->capacity; }
+bool ByteStream::buffer_empty() const { return buffer.empty(); }
 
-bool ByteStream::eof() const { return this->_end && this->r_bytes == this->w_bytes; }
+bool ByteStream::eof() const { return this->_end && this->buffer.empty(); }
 
 size_t ByteStream::bytes_written() const { return this->w_bytes; }
 
