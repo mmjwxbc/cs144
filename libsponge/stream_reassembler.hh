@@ -20,7 +20,6 @@ class StreamReassembler {
     bool _eof{false};
     size_t _eof_bytes{0};
     size_t _w_bytes{0};
-    uint64_t _first_unread{0};
     uint64_t _first_unassembled{0};
     uint64_t _unassembled_bytes{0};
   public:

@@ -53,14 +53,12 @@ int main()
             test.execute(BytesAvailable("abcd"));
             test.execute(NotAtEof{});   
     */
-    StreamReassembler streamreassembler(2);
-    streamreassembler.push_substring("ab", 0, 0);
+    StreamReassembler streamreassembler(8);
+    streamreassembler.push_substring("abc", 0, 0);
     print(streamreassembler);
-    streamreassembler.push_substring("cd", 2, 0);
+    streamreassembler.push_substring("ghx", 6, 1);
     print(streamreassembler);
-    streamreassembler.stream_out().read(2);
-    print(streamreassembler);
-    streamreassembler.push_substring("cd", 2, 0);
+    streamreassembler.push_substring("cdefg", 2, 0);
     print(streamreassembler);
     // streamreassembler.push_substring("c", 2, 0);
     // print(streamreassembler);
