@@ -14,7 +14,9 @@ class ByteStream {
     // Your code here -- add private members as necessary.
     size_t capacity{0};
     size_t unused_capacity{0};
-    std::vector<unsigned char> buffer{};
+    std::vector<char> buffer;
+    size_t hh;
+    size_t tt;
     size_t w_bytes{0};
     size_t r_bytes{0};
     // Hint: This doesn't need to be a sophisticated data structure at

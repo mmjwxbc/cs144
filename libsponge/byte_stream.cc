@@ -14,16 +14,19 @@ void DUMMY_CODE(Targs &&... /* unused */) {}
 using namespace std;
 
 // ByteStream::ByteStream(const size_t capacity) {this->capacity = capacity; this->buffer = vector<unsigned char>(capacity)}
-ByteStream::ByteStream(const size_t cap) : capacity(cap), unused_capacity(cap) {}
+ByteStream::ByteStream(const size_t cap) : capacity(cap), unused_capacity(cap), buffer(cap + 1), hh(0), tt(0) {}
 
 size_t ByteStream::write(const string &data) {
     size_t cnt = 0;
     for(size_t i = 0; i < data.size() && this->unused_capacity; i++) {
         cnt++;
-        this->buffer.push_back(data[i]);
+        this->buffer[this->tt] = data[i];
+        // cout << "write char (" << data[i] << ")" << endl;
+        this->tt = (this->tt + 1) % (this->capacity + 1);
         this->unused_capacity --;
         this->w_bytes ++;
     }
+    // cout << "unused_capacity = " << this->unused_capacity << endl;
     // for(int i = 0; i < this->buffer.size(); i++)
     //     cout << buffer[i];
     // cout << endl;
@@ -37,14 +40,14 @@ size_t ByteStream::write(const string &data) {
 string ByteStream::peek_output(const size_t len) const {
     string output = "";
     for(size_t i = 0; i < len && i < (this->capacity - this->unused_capacity); i++) {
-        output += this->buffer[i];
+        output += this->buffer[(this->hh + i) % (this->capacity + 1)];
     }
     return output;
 }
 
 //! \param[in] len bytes will be removed from the output side of the buffer
 void ByteStream::pop_output(const size_t len) {
-    this->buffer.erase(this->buffer.begin(), this->buffer.begin() + len);
+    this->hh += len;
     this->unused_capacity += len;
     this->r_bytes+=len;
 }
