@@ -12,6 +12,7 @@
 #include <utility>
 #include <vector>
 #include "libsponge/util/util.hh"
+#include "libsponge/wrapping_integers.hh"
 using namespace std;
 
 static constexpr unsigned NREPS = 32;
@@ -24,6 +25,9 @@ void print(StreamReassembler &streamreassembler) {
     cout << "unassembled_bytes = " << streamreassembler.unassembled_bytes() << endl;
     cout << "assembled_bytes = " << streamreassembler.stream_out().bytes_written() << endl;
     cout << "_output end_input = " << streamreassembler.stream_out().input_ended() << endl;
+    cout << "streamreassembler._unassembled_index() = " << streamreassembler._unassembled_index() << endl;
+    cout << "streamreassembler.stream_out().buffer_size() = " << streamreassembler.stream_out().buffer_size() << endl;
+    cout << "window size = " << streamreassembler.window_size() << endl;
     printf("********************************\n");
 }
 
@@ -53,17 +57,19 @@ int main()
             test.execute(BytesAvailable("abcd"));
             test.execute(NotAtEof{});   
     */
-    StreamReassembler streamreassembler(8);
-    streamreassembler.push_substring("abc", 0, 0);
-    print(streamreassembler);
-    streamreassembler.push_substring("ghx", 6, 1);
-    print(streamreassembler);
-    streamreassembler.push_substring("cdefg", 2, 0);
-    print(streamreassembler);
-    // streamreassembler.push_substring("c", 2, 0);
+    StreamReassembler streamreassembler(2);
+    // streamreassembler.push_substring("abcd", 0, 0);
     // print(streamreassembler);
-    // streamreassembler.push_substring("a", 0, 0);
+    // streamreassembler.push_substring("ghx", 6, 1);
     // print(streamreassembler);
+    // streamreassembler.push_substring("cdefg", 2, 0);
+    // print(streamreassembler);
+    streamreassembler.push_substring("ab", 0, 0);
+    print(streamreassembler);
+    streamreassembler.stream_out().read(2);
+    print(streamreassembler);
+    streamreassembler.push_substring("cd", 2, 0);
+    print(streamreassembler);
 
     // auto rd = get_random_generator();
 
@@ -124,4 +130,60 @@ int main()
     // bytesteam.write("tac");
     // cout << "buffer empty = " << bytesteam.buffer_empty() << endl;
     // cout << "Pop output = " << bytesteam.peek_output(2) << endl;
+
+    // unwrap(WrappingInt32(1), WrappingInt32(0), 0);
+    uint64_t ret = unwrap(WrappingInt32(1), WrappingInt32(0), UINT32_MAX);
+    cout <<  (ret == ((1ul << 32) + 1)) << endl;
 }
+
+// #include "libsponge/util/util.hh"
+// #include "libsponge/wrapping_integers.hh"
+
+// #include <cstdint>
+// #include <iostream>
+// #include <sstream>
+// #include <stdexcept>
+
+// using namespace std;
+
+// void check_roundtrip(const WrappingInt32 isn, const uint64_t value, const uint64_t checkpoint) {
+//     if (unwrap(wrap(value, isn), isn, checkpoint) != value) {
+//         ostringstream ss;
+
+//         ss << "Expected unwrap(wrap()) to recover same value, and it didn't!\n";
+//         ss << "  unwrap(wrap(value, isn), isn, checkpoint) did not equal value\n";
+//         ss << "  where value = " << value << ", isn = " << isn << ", and checkpoint = " << checkpoint << "\n";
+//         ss << "  (Difference between value and checkpoint is " << value - checkpoint << ".)\n";
+//         throw runtime_error(ss.str());
+//     }
+// }
+
+// int main() {
+//     try {
+//         auto rd = get_random_generator();
+//         uniform_int_distribution<uint32_t> dist31minus1{0, (uint32_t{1} << 31) - 1};
+//         uniform_int_distribution<uint32_t> dist32{0, numeric_limits<uint32_t>::max()};
+//         uniform_int_distribution<uint64_t> dist63{0, uint64_t{1} << 63};
+
+//         const uint64_t big_offset = (uint64_t{1} << 31) - 1;
+
+//         for (unsigned int i = 0; i < 1000000; i++) {
+//             const WrappingInt32 isn{dist32(rd)};
+//             const uint64_t val{dist63(rd)};
+//             const uint64_t offset{dist31minus1(rd)};
+
+//             check_roundtrip(isn, val, val);
+//             check_roundtrip(isn, val + 1, val);
+//             check_roundtrip(isn, val - 1, val);
+//             check_roundtrip(isn, val + offset, val);
+//             check_roundtrip(isn, val - offset, val);
+//             check_roundtrip(isn, val + big_offset, val);
+//             check_roundtrip(isn, val - big_offset, val);
+//         }
+//     } catch (const exception &e) {
+//         cerr << e.what() << endl;
+//         return 1;
+//     }
+
+//     return EXIT_SUCCESS;
+// }

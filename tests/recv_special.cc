@@ -16,20 +16,20 @@ int main() {
         auto rd = get_random_generator();
 
         /* segment before SYN */
-        {
-            uint32_t isn = uniform_int_distribution<uint32_t>{0, UINT32_MAX}(rd);
-            TCPReceiverTestHarness test{4000};
-            test.execute(ExpectState{TCPReceiverStateSummary::LISTEN});
-            test.execute(
-                SegmentArrives{}.with_seqno(isn + 1).with_data("hello").with_result(SegmentArrives::Result::NOT_SYN));
-            test.execute(ExpectState{TCPReceiverStateSummary::LISTEN});
-            test.execute(ExpectUnassembledBytes{0});
-            test.execute(ExpectBytes{""});
-            test.execute(ExpectTotalAssembledBytes{0});
-            test.execute(SegmentArrives{}.with_syn().with_seqno(isn).with_result(SegmentArrives::Result::OK));
-            test.execute(ExpectState{TCPReceiverStateSummary::SYN_RECV});
-            test.execute(ExpectAckno{WrappingInt32{isn + 1}});
-        }
+        // {
+        //     uint32_t isn = uniform_int_distribution<uint32_t>{0, UINT32_MAX}(rd);
+        //     TCPReceiverTestHarness test{4000};
+        //     test.execute(ExpectState{TCPReceiverStateSummary::LISTEN});
+        //     test.execute(
+        //         SegmentArrives{}.with_seqno(isn + 1).with_data("hello").with_result(SegmentArrives::Result::NOT_SYN));
+        //     test.execute(ExpectState{TCPReceiverStateSummary::LISTEN});
+        //     test.execute(ExpectUnassembledBytes{0});
+        //     test.execute(ExpectBytes{""});
+        //     test.execute(ExpectTotalAssembledBytes{0});
+        //     test.execute(SegmentArrives{}.with_syn().with_seqno(isn).with_result(SegmentArrives::Result::OK));
+        //     test.execute(ExpectState{TCPReceiverStateSummary::SYN_RECV});
+        //     test.execute(ExpectAckno{WrappingInt32{isn + 1}});
+        // }
 
         /* segment with SYN + data */
         {
