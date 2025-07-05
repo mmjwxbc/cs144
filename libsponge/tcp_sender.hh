@@ -8,6 +8,9 @@
 
 #include <functional>
 #include <queue>
+#include <vector>
+#include <functional>
+#include <map>
 
 //! \brief The "sender" part of a TCP implementation.
 
@@ -23,14 +26,46 @@ class TCPSender {
     //! outbound queue of segments that the TCPSender wants sent
     std::queue<TCPSegment> _segments_out{};
 
-    //! retransmission timer for the connection
+    //! initial retransmission timer for the connection
     unsigned int _initial_retransmission_timeout;
+
+    //! current retransmission timer for the connection
+    unsigned int _cur_retransmission_timeout;
 
     //! outgoing stream of bytes that have not yet been sent
     ByteStream _stream;
 
+
+    //! priority_queue for storing unacknowledged segments <expired time, index>
+    std::priority_queue<std::pair<uint64_t, uint64_t>, std::vector<std::pair<uint64_t, uint64_t>>, std::greater<std::pair<uint64_t, uint64_t>>> _unack_time_index;
+
+    //! priority_queue for storing unacknowledged segments <index>
+    std::priority_queue<uint64_t, std::vector<uint64_t>, std::greater<uint64_t>> _unack_index;
+
+
+    //! map for storing unacknowledged segments <index, TCPSegment>
+    std::unordered_map<uint64_t, TCPSegment> _unack_segments;
+    
+    //! cur ms
+    uint64_t _cur_ms{0};
+    
+    //! TCPReceiver Window Size
+    uint16_t _recv_window_size{1};
+
+    //! TCPSender Window Size
+    uint16_t _send_window_size{1};
+
     //! the (absolute) sequence number for the next byte to be sent
     uint64_t _next_seqno{0};
+
+    //！ the bytes of not acknowledged
+    uint64_t _bytes_in_flight{0};
+
+    //! resend times
+    unsigned int _retransmission_times{0};
+
+    //! fin sent flag
+    bool _fin_sent{false};
 
   public:
     //! Initialize a TCPSender
