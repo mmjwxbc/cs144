@@ -37,23 +37,25 @@ class TCPSender {
 
 
     //! priority_queue for storing unacknowledged segments <expired time, index>
-    std::priority_queue<std::pair<uint64_t, uint64_t>, std::vector<std::pair<uint64_t, uint64_t>>, std::greater<std::pair<uint64_t, uint64_t>>> _unack_time_index;
+    // std::priority_queue<std::pair<uint64_t, uint64_t>, std::vector<std::pair<uint64_t, uint64_t>>, std::greater<std::pair<uint64_t, uint64_t>>> _unack_time_index;
 
     //! priority_queue for storing unacknowledged segments <index>
-    std::priority_queue<uint64_t, std::vector<uint64_t>, std::greater<uint64_t>> _unack_index;
+    // std::priority_queue<uint64_t, std::vector<uint64_t>, std::greater<uint64_t>> _unack_index;
+    std::queue<uint64_t> _unack_index;
 
 
     //! map for storing unacknowledged segments <index, TCPSegment>
     std::unordered_map<uint64_t, TCPSegment> _unack_segments;
-    
-    //! cur ms
-    uint64_t _cur_ms{0};
     
     //! TCPReceiver Window Size
     uint16_t _recv_window_size{1};
 
     //! TCPSender Window Size
     uint16_t _send_window_size{1};
+
+    //! cur ms
+    uint64_t _cur_ms{0};
+  
 
     //! the (absolute) sequence number for the next byte to be sent
     uint64_t _next_seqno{0};
@@ -67,6 +69,8 @@ class TCPSender {
     //! fin sent flag
     bool _fin_sent{false};
 
+    //! zero_win
+    bool _zero_win{false};
   public:
     //! Initialize a TCPSender
     TCPSender(const size_t capacity = TCPConfig::DEFAULT_CAPACITY,
