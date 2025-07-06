@@ -1,7 +1,7 @@
 #include "tcp_sender.hh"
 
 #include "tcp_config.hh"
-
+#include "tcp_state.hh"
 #include <algorithm>
 #include <random>
 #include <iostream>
@@ -23,7 +23,6 @@ TCPSender::TCPSender(const size_t capacity, const uint16_t retx_timeout, const s
     , _initial_retransmission_timeout{retx_timeout}
     , _cur_retransmission_timeout(retx_timeout)
     , _stream(capacity)
-    // , _unack_time_index()
     , _unack_index()
     , _unack_segments() {}
 
@@ -31,17 +30,16 @@ uint64_t TCPSender::bytes_in_flight() const { return _bytes_in_flight; }
 
 void TCPSender::fill_window() {
     while (_recv_window_size != 0) {
-        size_t send_size;
-        if (_next_seqno == 0 || _stream.buffer_size() || (_stream.input_ended() && !_fin_sent)) {
-            TCPSegment tcpsegment;
-            TCPHeader &tcpheader = tcpsegment.header();
-            tcpheader.win = _send_window_size;
+        TCPSegment tcpsegment;
+        TCPHeader &tcpheader = tcpsegment.header();
+        size_t send_size = 0;
+        if(_next_seqno == 0) {
+            send_size = 1;
+            tcpheader.syn = true;
             tcpheader.seqno = wrap(_next_seqno, _isn);
-            if (_next_seqno == 0) {
-                tcpheader.syn = true;
-                send_size = 1;
-            }
-            if (_stream.buffer_size() && _next_seqno != 0) {
+        } else if(_stream.buffer_size() && _next_seqno > _bytes_in_flight && !_stream.input_ended()) {
+            tcpheader.seqno = wrap(_next_seqno, _isn);
+            if (_stream.buffer_size()) {
                 size_t max_payload = TCPConfig::MAX_PAYLOAD_SIZE;
                 size_t available_window = _recv_window_size;
 
@@ -57,23 +55,39 @@ void TCPSender::fill_window() {
                     send_size = min(send_size, available_window - 1);
                 }
                 string data = _stream.read(send_size);
-                // cout << "seqno = " << _next_seqno << " data = " << data << endl;
                 tcpsegment.payload() = Buffer(move(data));
-            } else if (_stream.input_ended() && _recv_window_size) {
-                tcpheader.fin = true;
-                send_size = 1;
-            }
+            } 
             _recv_window_size -= send_size;
             _fin_sent |= tcpheader.fin;
             _segments_out.push(tcpsegment);
+            if(_unack_index.empty()) {
+                _cur_ms = 0;
+            }
             _unack_index.push(_next_seqno);
-            // _unack_time_index.push(make_pair(_cur_ms + _cur_retransmission_timeout, _next_seqno));
             _unack_segments.insert(make_pair(_next_seqno, tcpsegment));
 
             _next_seqno += tcpsegment.length_in_sequence_space();
             _bytes_in_flight += tcpsegment.length_in_sequence_space();
+            break;
+        } else if (_stream.input_ended() && _recv_window_size && !_fin_sent) {
+            tcpheader.fin = true;
+            send_size = 1;
+            _fin_sent = true;
         } else {
             break;
+        }
+        if(send_size != 0) {
+            _recv_window_size -= send_size;
+            _fin_sent |= tcpheader.fin;
+            _segments_out.push(tcpsegment);
+            if(_unack_index.empty()) {
+                _cur_ms = 0;
+            }
+            _unack_index.push(_next_seqno);
+            _unack_segments.insert(make_pair(_next_seqno, tcpsegment));
+
+            _next_seqno += tcpsegment.length_in_sequence_space();
+            _bytes_in_flight += tcpsegment.length_in_sequence_space();
         }
     }
 }
@@ -139,10 +153,10 @@ void TCPSender::tick(const size_t ms_since_last_tick) {
     if(_cur_ms >= cur_tto) {
         if(!_unack_index.empty()) {
             _cur_ms = 0;
-            _segments_out.push(_unack_segments.at(_unack_index.front()));
             if(!_zero_win) {
                 _retransmission_times ++;
             }
+            _segments_out.push(_unack_segments.at(_unack_index.front()));
         }
     }
     // vector<pair<uint64_t, uint64_t>> expired_indices;

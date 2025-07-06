@@ -21,6 +21,12 @@ class TCPConnection {
     //! in case the remote TCPConnection doesn't know we've received its whole stream?
     bool _linger_after_streams_finish{true};
 
+    //! TCP Connection Flag
+    bool _active{false};
+
+    //! time since last tcp segment receiver
+    size_t _time_since_last_segment_received{0};
+
   public:
     //! \name "Input" interface for the writer
     //!@{
@@ -67,6 +73,9 @@ class TCPConnection {
 
     //! Called periodically when time elapses
     void tick(const size_t ms_since_last_tick);
+
+    //! Collect Output from TCPSender outputs
+    void collect_output();
 
     //! \brief TCPSegments that the TCPConnection has enqueued for transmission.
     //! \note The owner or operating system will dequeue these and

@@ -30,7 +30,7 @@ void TCPReceiver::segment_received(const TCPSegment &seg) {
             index --;
         }
         _reassembler.push_substring(buffer.copy(), index, header.fin);
-        cout << "syn = " << _syn << " index = " << index << " data = " << buffer.copy() << endl;
+        // cout << "syn = " << _syn << " index = " << index << " data = " << buffer.copy() << endl;
     } else if(header.fin) {
         _reassembler.stream_out().end_input();
     }
