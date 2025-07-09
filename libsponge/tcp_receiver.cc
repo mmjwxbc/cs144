@@ -59,7 +59,7 @@ void TCPReceiver::segment_received(const TCPSegment &seg) {
 
     // Push the payload (if any) and FIN (if any)
     _reassembler.push_substring(std::move(payload.copy()), abs_index, header.fin);
-
+    
     // No need to call stream_out().end_input() manually — it's handled by eof flag in push_substring
 }
 

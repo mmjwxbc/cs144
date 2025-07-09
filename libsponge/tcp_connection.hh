@@ -30,6 +30,8 @@ class TCPConnection {
     //! second since in time wait state
     size_t _sec_since_time_wati_state{0}; 
 
+    void set_rst_state(bool send_rst);
+
   public:
     //! \name "Input" interface for the writer
     //!@{

@@ -8,19 +8,20 @@
 // automated checks run by `make check`.
 
 template <typename... Targs>
-void DUMMY_CODE(Targs &&... /* unused */) {}
+void DUMMY_CODE(Targs &&.../* unused */) {}
 
 using namespace std;
 
-void tcpheader_info(TCPSegment seg, bool _recv) {
-    if(_recv) {
-        cout << "Recv ";
-    } else {
-        cout << "Send ";
-    }
-    cout << "ack=" << seg.header().ack << " syn=" << seg.header().syn << " fin=" << seg.header().fin << " seqno=" << seg.header().seqno << " ackno=" << seg.header().ackno.raw_value() << " size=" << seg.length_in_sequence_space() << endl;
-}
-
+// void tcpheader_info(TCPSegment seg, bool _recv) {
+//     if(_recv) {
+//         cout << "Recv ";
+//     } else {
+//         cout << "Send ";
+//     }
+//     cout << "ack=" << seg.header().ack << " syn=" << seg.header().syn << " fin=" << seg.header().fin << " seqno=" <<
+//     seg.header().seqno << " ackno=" << seg.header().ackno.raw_value() << " size=" << seg.length_in_sequence_space()
+//     << endl;
+// }
 size_t TCPConnection::remaining_outbound_capacity() const { return _sender.stream_in().remaining_capacity(); }
 
 size_t TCPConnection::bytes_in_flight() const { return _sender.bytes_in_flight(); }
@@ -29,241 +30,280 @@ size_t TCPConnection::unassembled_bytes() const { return _receiver.unassembled_b
 
 size_t TCPConnection::time_since_last_segment_received() const { return _time_since_last_segment_received; }
 
-// void TCPConnection::segment_received(const TCPSegment &seg) {
-//     #ifndef NDEBUG
-//     tcpheader_info(seg, true);
-//     #endif
-//     TCPState tcpstate = state();
-//     TCPHeader tcpheader = seg.header();
-//     _time_since_last_segment_received = 0;
-//     if(tcpheader.ack) {
-//         _sender.ack_received(tcpheader.ackno, tcpheader.win);
-//     }
-//     if(tcpheader.rst) {
-//         _active = false;
-//         _sender.stream_in().set_error();
-//         _receiver.stream_out().set_error();
-//         _sender.send_empty_segment();
-//         return;
-//     }
-//     if(tcpstate == TCPState::State::LISTEN) {
-//         _receiver.segment_received(seg);
-//         if(TCPState::state_summary(_receiver) == TCPReceiverStateSummary::SYN_RECV) {
-//             _sender.fill_window();
-//         }
-//     } else if(tcpstate == TCPState::State::SYN_SENT) {
-//         if (!seg.header().ack && seg.header().syn) {
-//             // simultaneous open
-//             _receiver.segment_received(seg);
-//             _sender.send_empty_segment();
-//             collect_output();
-//             return;
-//         }
-//         _receiver.segment_received(seg);
-//         _sender.ack_received(tcpheader.ackno, tcpheader.win);
-//         if(state() == TCPState::State::ESTABLISHED) {
-//             _sender.send_empty_segment();
-//         }
-//     } else if(tcpstate == TCPState::State::SYN_RCVD) {
-//         _receiver.segment_received(seg);
-//         _sender.ack_received(tcpheader.ackno, tcpheader.win);
-//     } else if(tcpstate == TCPState::State::ESTABLISHED ) {
-//         _receiver.segment_received(seg);
-//         if(tcpheader.ack) {
-//             _sender.ack_received(tcpheader.ackno, tcpheader.win);
-//         }
-//         if(tcpheader.fin) {
-//             _sender.send_empty_segment();
-            
-//         }
-//         _sender.fill_window();
-//     } else if(tcpstate == TCPState::State::FIN_WAIT_1) {
-//         _receiver.segment_received(seg);
-//         if(tcpheader.ack) {
-//             _sender.ack_received(tcpheader.ackno, tcpheader.win);
-//         }
-//         if(TCPState::state_summary(_sender) == TCPSenderStateSummary::FIN_ACKED) {
-//             _sender.send_empty_segment();
-//         }
-//     } else if(tcpstate == TCPState::State::FIN_WAIT_2) {
-//         _receiver.segment_received(seg);
-//         if(TCPState::state_summary(_sender) == TCPReceiverStateSummary::FIN_RECV) {
-//             _sender.send_empty_segment();
-//         }
-//     } else if(tcpstate == TCPState::State::CLOSING) {
-//         _receiver.segment_received(seg);
-//     } else if(tcpstate == TCPState::State::TIME_WAIT) {
-//         _sender.send_empty_segment();
-//     } else if(tcpstate == TCPState::State::LAST_ACK) {
-//         _sender.ack_received(tcpheader.ackno, tcpheader.win);
-//         if(TCPState::state_summary(_sender) == TCPSenderStateSummary::FIN_ACKED) {
-//             _active = false;
-//             _linger_after_streams_finish = false;
-//         }
-//     }
-//     collect_output();
-// }
-
-void TCPConnection::segment_received(const TCPSegment &seg) {
-    #ifndef NDEBUG
-    tcpheader_info(seg, true);
-    #endif
-
-    _time_since_last_segment_received = 0;
-
-    // 立即处理 RST
-    if (seg.header().rst) {
-        _receiver.stream_out().set_error();
-        _sender.stream_in().set_error();
-        _active = false;
-        _linger_after_streams_finish = false;
-        return;
-    }
-
-    // 将段交给 receiver 处理
-    _receiver.segment_received(seg);
-
-    bool need_send_ack = seg.length_in_sequence_space() > 0;
-
-    if (seg.header().ack) {
-        _sender.ack_received(seg.header().ackno, seg.header().win);
-        if (need_send_ack && !_sender.segments_out().empty()) {
-            need_send_ack = false;
-        }
-    }
-
-    // LISTEN -> SYN_RECV -> CONNECT
-    if (TCPState::state_summary(_receiver) == TCPReceiverStateSummary::SYN_RECV &&
-        TCPState::state_summary(_sender) == TCPSenderStateSummary::CLOSED) {
-        connect();
-        return;
-    }
-
-    // 如果 receiver 收到 FIN，sender 状态为 SYN_ACKED，则取消 linger（进入 CLOSE_WAIT）
-    if (TCPState::state_summary(_receiver) == TCPReceiverStateSummary::FIN_RECV &&
-        TCPState::state_summary(_sender) == TCPSenderStateSummary::SYN_ACKED) {
-        _linger_after_streams_finish = false;
-    }
-
-    // 检查是否可以关闭连接（正常关闭）
-    if (TCPState::state_summary(_receiver) == TCPReceiverStateSummary::FIN_RECV &&
-        TCPState::state_summary(_sender) == TCPSenderStateSummary::FIN_ACKED &&
-        !_linger_after_streams_finish) {
-        _active = false;
-        return;
-    }
-
-    // 若需要，发送空ACK
-    if (need_send_ack) {
-        _sender.send_empty_segment();
-    }
-
-    collect_output();
-}
-
-
 bool TCPConnection::active() const { return _active; }
 
-size_t TCPConnection::write(const string &data) {
-    size_t written_bytes = _sender.stream_in().write(data);
-    if(_active && _sender.next_seqno_absolute() > bytes_in_flight() && !_sender.stream_in().input_ended()) {
-        _sender.fill_window();
-        collect_output();
+void TCPConnection::set_rst_state(bool send_rst) {
+    if (send_rst) {
+        TCPSegment segment;
+        segment.header().rst = true;
+        _segments_out.push(segment);
     }
-    return written_bytes;
+    _receiver.stream_out().set_error();
+    _sender.stream_in().set_error();
+    _linger_after_streams_finish = false;
+    _active = false;
 }
 
-//! \param[in] ms_since_last_tick number of milliseconds since the last call to this method
-// void TCPConnection::tick(const size_t ms_since_last_tick) { 
-//     if(state() == TCPState::State::TIME_WAIT) {
-//         _sec_since_time_wati_state += ms_since_last_tick;
-//         if(_sec_since_time_wati_state >= _cfg.rt_timeout * 10) {
-//             _active = false;
-//             _linger_after_streams_finish = false;
-//         }
-//     }
-//     _time_since_last_segment_received += ms_since_last_tick;
-//     _sender.tick(ms_since_last_tick); 
-//     collect_output();
-// }
-
-
-void TCPConnection::tick(const size_t ms_since_last_tick) {
-    _time_since_last_segment_received += ms_since_last_tick;
-    _sender.tick(ms_since_last_tick);
-
-    if (_sender.consecutive_retransmissions() > _cfg.MAX_RETX_ATTEMPTS) {
-        // 清空待发送段，发送 RST
-        while (!_sender.segments_out().empty()) _sender.segments_out().pop();
-        TCPSegment rst_seg;
-        rst_seg.header().rst = true;
-        _segments_out.push(rst_seg);
-        _receiver.stream_out().set_error();
-        _sender.stream_in().set_error();
-        _active = false;
-        _linger_after_streams_finish = false;
+void TCPConnection::segment_received(const TCPSegment &seg) {
+    _time_since_last_segment_received = 0;
+    bool need_send_ack = seg.length_in_sequence_space() > 0
+                     || seg.header().fin
+                     || seg.header().rst
+                     || (!seg.header().ack && TCPState::state_summary(_receiver) == TCPReceiverStateSummary::SYN_RECV);
+    auto &header = seg.header();
+    TCPState tcpstate = state();
+    if (header.rst) {
+        set_rst_state(false);
         return;
     }
-
+    _receiver.segment_received(seg);
+    if (header.ack) {
+        _sender.ack_received(header.ackno, header.win);
+    }
+    if(TCPState::state_summary(_receiver) == TCPReceiverStateSummary::SYN_RECV && 
+            TCPState::state_summary(_sender) == TCPSenderStateSummary::CLOSED) {
+        connect(); // connect() == fill_window()
+        return;
+    }
+    // if(TCPState::state_summary(_receiver) == TCPReceiverStateSummary::SYN_RECV &&
+    //         TCPState::state_summary(_sender) == TCPSenderStateSummary::SYN_ACKED) {
+    //     _sender.fill_window();
+    // }
+    if(TCPState::state_summary(_receiver) == TCPReceiverStateSummary::FIN_RECV &&
+            TCPState::state_summary(_sender) == TCPSenderStateSummary::SYN_ACKED) {
+        _linger_after_streams_finish = false;
+    }
+    if(TCPState::state_summary(_receiver) == TCPReceiverStateSummary::FIN_RECV &&
+            TCPState::state_summary(_sender) == TCPSenderStateSummary::FIN_SENT && !_linger_after_streams_finish) {
+        // last ack state        
+    }
+    if(TCPState::state_summary(_receiver) == TCPReceiverStateSummary::SYN_RECV &&
+            TCPState::state_summary(_sender) == TCPSenderStateSummary::FIN_ACKED) {
+        // send ack (fill_window or send_empty_segment)
+    }
+    if(TCPState::state_summary(_receiver) == TCPReceiverStateSummary::FIN_RECV &&
+            TCPState::state_summary(_sender) == TCPSenderStateSummary::FIN_ACKED && !_linger_after_streams_finish) {
+        _active = false;
+        return;
+    }
+    bool keepalive = (seg.length_in_sequence_space() == 0 && _receiver.ackno().has_value() &&
+                    _receiver.ackno().value() != header.seqno);
+    keepalive |= (header.ack && header.ackno - _sender.next_seqno() > 0);
+    if (!need_send_ack && keepalive) {
+        // 没有建立连接，不需要发送空的ack
+        if (TCPState::state_summary(_receiver) != TCPReceiverStateSummary::SYN_RECV ||
+            TCPState::state_summary(_sender) != TCPSenderStateSummary::SYN_ACKED) {
+        keepalive = false;
+        }
+    }
+    if ((need_send_ack && _sender.segments_out().empty()) || keepalive) {
+        _sender.send_empty_segment();
+    }
     collect_output();
+}
 
+size_t TCPConnection::write(const string &data) {
+    auto write_count = _sender.stream_in().write(data);
+    _sender.fill_window();
+    collect_output();
+    return write_count;
+}
+void TCPConnection::tick(const size_t ms_since_last_tick) {
+    _sender.tick(ms_since_last_tick);
+    if (_sender.consecutive_retransmissions() > _cfg.MAX_RETX_ATTEMPTS) {
+        set_rst_state(true);
+        return;
+    }
+    collect_output();
+    _time_since_last_segment_received += ms_since_last_tick;
     if (TCPState::state_summary(_receiver) == TCPReceiverStateSummary::FIN_RECV &&
-        TCPState::state_summary(_sender) == TCPSenderStateSummary::FIN_ACKED &&
-        _linger_after_streams_finish &&
-        _time_since_last_segment_received >= 10 * _cfg.rt_timeout) {
+            TCPState::state_summary(_sender) == TCPSenderStateSummary::FIN_ACKED && _linger_after_streams_finish &&
+            _time_since_last_segment_received >= 10 * _cfg.rt_timeout) {
         _active = false;
         _linger_after_streams_finish = false;
     }
 }
-
 void TCPConnection::end_input_stream() {
     _sender.stream_in().end_input();
     _sender.fill_window();
     collect_output();
 }
-
 void TCPConnection::connect() {
     _sender.fill_window();
     _active = true;
-    _linger_after_streams_finish = true;
     collect_output();
 }
-
 void TCPConnection::collect_output() {
-    auto &sender_queue = _sender.segments_out(); 
-    while(! sender_queue.empty()) {
-        TCPSegment &seg = sender_queue.front();
-        TCPHeader &header = seg.header();
-        if(_receiver.ackno().has_value()) {
+    while (!_sender.segments_out().empty()) {
+        auto &segment = _sender.segments_out().front();
+        auto &header = segment.header();
+        if (_receiver.ackno().has_value()) {
             header.ack = true;
             header.ackno = _receiver.ackno().value();
+            header.win = _receiver.window_size();
         }
-        #ifndef NDEBUG
-        tcpheader_info(seg, false);
-        #endif
-        if(!_active) {
-            header.rst = true;
-        }
-        header.win = _receiver.window_size();
-        _segments_out.push(move(seg));
-        sender_queue.pop();
+        _segments_out.push(segment);
+        _sender.segments_out().pop();
     }
 }
-
 TCPConnection::~TCPConnection() {
     try {
         if (active()) {
             cerr << "Warning: Unclean shutdown of TCPConnection\n";
-            _active = false;
-            // Your code here: need to send a RST segment to the peer
-            _sender.stream_in().set_error();
-            _receiver.stream_out().set_error();
-            _sender.send_empty_segment();
+            // RST
+            set_rst_state(false);
         }
     } catch (const exception &e) {
         std::cerr << "Exception destructing TCP FSM: " << e.what() << std::endl;
     }
 }
+
+// void TCPConnection::segment_received(const TCPSegment &seg) {
+//     #ifndef NDEBUG
+//     tcpheader_info(seg, true);
+//     #endif
+//     _time_since_last_segment_received = 0;
+//     bool need_send_ack = seg.length_in_sequence_space() != 0;
+//     auto &header = seg.header();
+//     // 收到rst包, 则直接终止
+//     if (header.rst) {
+//         set_rst_state(false);
+//         return;
+//     }
+//     // 接收数据
+//     _receiver.segment_received(seg);
+//     // 收到ack包
+//     if (header.ack) {
+//         _sender.ack_received(header.ackno, header.win);
+//     }
+//     // LISTEN -> SYN_RCVD
+//     // SYN_RCVD -> SYN_SENT
+//     if (TCPState::state_summary(_receiver) == TCPReceiverStateSummary::SYN_RECV &&
+//         TCPState::state_summary(_sender) == TCPSenderStateSummary::CLOSED) {
+//         // 发送SYN+ACK
+//         connect();
+//         return;
+//     }
+//     // ESTABLISHED -> CLOSE_WAIT
+//     if (TCPState::state_summary(_receiver) == TCPReceiverStateSummary::FIN_RECV &&
+//         TCPState::state_summary(_sender) == TCPSenderStateSummary::SYN_ACKED) {
+//         // 直接断开连接，不需要等待
+//         _linger_after_streams_finish = false;
+//     }
+//     // CLOSED
+//     if (TCPState::state_summary(_receiver) == TCPReceiverStateSummary::FIN_RECV &&
+//         TCPState::state_summary(_sender) == TCPSenderStateSummary::FIN_ACKED && !_linger_after_streams_finish) {
+//         _active = false;
+//         return;
+//     }
+//     // 发送空的ack, keepalive
+//     bool keepalive = (seg.length_in_sequence_space() == 0 && _receiver.ackno().has_value() &&
+//                         _receiver.ackno().value() != header.seqno);
+//     keepalive |= (header.ack && header.ackno - _sender.next_seqno() > 0);
+//     if (!need_send_ack && keepalive) {
+//         // 没有建立连接，不需要发送空的ack
+//         if (TCPState::state_summary(_receiver) != TCPReceiverStateSummary::SYN_RECV ||
+//             TCPState::state_summary(_sender) != TCPSenderStateSummary::SYN_ACKED) {
+//         keepalive = false;
+//         }
+//     }
+//     if (need_send_ack || keepalive) {
+//         _sender.send_empty_segment();
+//     }
+//     // 给待发送的包添加 ack和win
+//     collect_output();
+// }
+
+// void TCPConnection::set_rst_state(bool send_rst) {
+//   if (send_rst) {
+//     TCPSegment segment;
+//     segment.header().rst = true;
+//     _segments_out.push(segment);
+//   }
+//   _receiver.stream_out().set_error();
+//   _sender.stream_in().set_error();
+//   _linger_after_streams_finish = false;
+//   _active = false;
+// }
+
+// bool TCPConnection::active() const { return _active; }
+
+// size_t TCPConnection::write(const string &data) {
+//     size_t written_bytes = _sender.stream_in().write(data);
+//     if(_active && _sender.next_seqno_absolute() > bytes_in_flight() && !_sender.stream_in().input_ended()) {
+//         _sender.fill_window();
+//         collect_output();
+//     }
+//     return written_bytes;
+// }
+
+// //! \param[in] ms_since_last_tick number of milliseconds since the last call to this method
+// void TCPConnection::tick(const size_t ms_since_last_tick) {
+//     _time_since_last_segment_received += ms_since_last_tick;
+//     _sender.tick(ms_since_last_tick);
+
+//     if (_sender.consecutive_retransmissions() > _cfg.MAX_RETX_ATTEMPTS) {
+//         while (!_sender.segments_out().empty()) _sender.segments_out().pop();
+//         TCPSegment rst_seg;
+//         rst_seg.header().rst = true;
+//         _segments_out.push(rst_seg);
+//         _receiver.stream_out().set_error();
+//         _sender.stream_in().set_error();
+//         _active = false;
+//         _linger_after_streams_finish = false;
+//         return;
+//     }
+
+//     collect_output();
+
+//     if (state() == TCPState::State::TIME_WAIT &&
+//         _time_since_last_segment_received >= 10 * _cfg.rt_timeout) {
+//         _active = false;
+//         _linger_after_streams_finish = false;
+//     }
+// }
+
+// void TCPConnection::end_input_stream() {
+//     _sender.stream_in().end_input();
+//     _sender.fill_window();
+//     collect_output();
+// }
+
+// void TCPConnection::connect() {
+//     _sender.fill_window();
+//     _active = true;
+//     _linger_after_streams_finish = true;
+//     collect_output();
+// }
+
+// void TCPConnection::collect_output() {
+//     auto &sender_queue = _sender.segments_out();
+//     while(! sender_queue.empty()) {
+//         TCPSegment &seg = sender_queue.front();
+//         TCPHeader &header = seg.header();
+//         if(_receiver.ackno().has_value()) {
+//             header.ack = true;
+//             header.ackno = _receiver.ackno().value();
+//         }
+//         #ifndef NDEBUG
+//         tcpheader_info(seg, false);
+//         #endif
+//         header.win = _receiver.window_size();
+//         _segments_out.push(move(seg));
+//         sender_queue.pop();
+//     }
+// }
+
+// TCPConnection::~TCPConnection() {
+//     try {
+//         if (active()) {
+//             cerr << "Warning: Unclean shutdown of TCPConnection\n";
+//             set_rst_state(false);
+//         }
+//     } catch (const exception &e) {
+//         std::cerr << "Exception destructing TCP FSM: " << e.what() << std::endl;
+//     }
+// }
 
 // #include "tcp_connection.hh"
 
