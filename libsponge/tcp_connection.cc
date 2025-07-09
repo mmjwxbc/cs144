@@ -87,8 +87,8 @@ void TCPConnection::segment_received(const TCPSegment &seg) {
         return;
     }
     bool keepalive = (seg.length_in_sequence_space() == 0 && _receiver.ackno().has_value() &&
-                    _receiver.ackno().value() != header.seqno);
-    keepalive |= (header.ack && header.ackno - _sender.next_seqno() > 0);
+                    _receiver.ackno().value() -1 == header.seqno);
+    // keepalive |= (header.ack && header.ackno - _sender.next_seqno() > 0);
     if (!need_send_ack && keepalive) {
         // 没有建立连接，不需要发送空的ack
         if (TCPState::state_summary(_receiver) != TCPReceiverStateSummary::SYN_RECV ||
@@ -140,7 +140,15 @@ void TCPConnection::collect_output() {
         if (_receiver.ackno().has_value()) {
             header.ack = true;
             header.ackno = _receiver.ackno().value();
-            header.win = _receiver.window_size();
+            const uint16_t MAX_TCP_WINDOW_SIZE = 65535; 
+    
+            size_t current_window_size = _receiver.window_size();
+
+            if (current_window_size > MAX_TCP_WINDOW_SIZE) {
+                header.win = MAX_TCP_WINDOW_SIZE;
+            } else {
+                header.win = static_cast<uint16_t>(current_window_size);
+            }
         }
         _segments_out.push(segment);
         _sender.segments_out().pop();
