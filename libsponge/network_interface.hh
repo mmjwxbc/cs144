@@ -81,6 +81,12 @@ class NetworkInterface {
 
     //! \brief Called periodically when time elapses
     void tick(const size_t ms_since_last_tick);
+ 
+    //! \brief Send ARP Request
+    void send_arp_request(const uint32_t next_hop_ip);
+
+    //! \brief Send IPV4 Datagram
+    void send_ipvc_dgram(const uint32_t ip, const InternetDatagram &dgram);
 };
 
 #endif  // SPONGE_LIBSPONGE_NETWORK_INTERFACE_HH
