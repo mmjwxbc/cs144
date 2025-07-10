@@ -40,6 +40,25 @@ class NetworkInterface {
     //! outbound queue of Ethernet frames that the NetworkInterface wants sent
     std::queue<EthernetFrame> _frames_out{};
 
+    //! queue stros internetdatagrams which unknown ethernet address 
+    std::unordered_map<uint32_t, std::vector<InternetDatagram>> _unk_dgrams{};
+    
+    //! stores a mapping from IP addresses to MAC addresses
+    std::unordered_map<uint32_t, EthernetAddress> _ip_mac{};
+
+    //! store arp request in last 5s to make sure not to send duplication arp
+    std::unordered_map<uint32_t, size_t> _waiting_arp_response_ip_addr{};
+    //! A min-heap to store the elapsed time for each IP-MAC mapping entry.
+    //! The heap stores pairs of {elapsed_time_in_ms, IP_Address}.
+    //! This allows efficient retrieval of the entry with the smallest (oldest) elapsed time.
+    std::unordered_map<uint32_t, size_t> _ip_mac_expiration_times{};
+
+    //! period of validity
+    const size_t _elapsed_time{30000};
+
+    //! elapsed time since NetworkInterface started
+    size_t _elapsed_time_since_start{0};
+
   public:
     //! \brief Construct a network interface with given Ethernet (network-access-layer) and IP (internet-layer) addresses
     NetworkInterface(const EthernetAddress &ethernet_address, const Address &ip_address);
