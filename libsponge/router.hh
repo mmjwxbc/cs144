@@ -5,6 +5,65 @@
 
 #include <optional>
 #include <queue>
+#include <memory>
+#include <iostream>
+#include <string>
+
+class TrieNode {
+public:
+    std::unique_ptr<TrieNode> child[2];  // 子节点，0 和 1
+    bool is_end = false;                 // 是否为合法路径结尾
+
+    TrieNode() = default;
+};
+
+class Trie {
+private:
+    std::unique_ptr<TrieNode> root;
+
+public:
+    Trie() : root(std::make_unique<TrieNode>()) {}
+
+    // 插入一串二进制 bool 序列（如 {1,0,1,1}）
+    void insert(const std::vector<bool> &bits) {
+        TrieNode *node = root.get();
+        for (bool bit : bits) {
+            int b = bit ? 1 : 0;
+            if (!node->child[b]) {
+                node->child[b] = std::make_unique<TrieNode>();
+            }
+            node = node->child[b].get();
+        }
+        node->is_end = true;
+    }
+
+    // 查找一串二进制序列是否存在
+    bool search(const std::vector<bool> &bits) const {
+        const TrieNode *node = root.get();
+        for (bool bit : bits) {
+            int b = bit ? 1 : 0;
+            if (!node->child[b]) {
+                return false;
+            }
+            node = node->child[b].get();
+        }
+        return node->is_end;
+    }
+
+    // 前缀匹配（例如用于最长前缀匹配）
+    bool starts_with(const std::vector<bool> &prefix) const {
+        const TrieNode *node = root.get();
+        for (bool bit : prefix) {
+            int b = bit ? 1 : 0;
+            if (!node->child[b]) {
+                return false;
+            }
+            node = node->child[b].get();
+        }
+        return true;
+    }
+};
+
 
 //! \brief A wrapper for NetworkInterface that makes the host-side
 //! interface asynchronous: instead of returning received datagrams
@@ -38,6 +97,20 @@ class AsyncNetworkInterface : public NetworkInterface {
     std::queue<InternetDatagram> &datagrams_out() { return _datagrams_out; }
 };
 
+class Route_item {
+    public:
+        Route_item(uint32_t prefix, uint8_t length, const std::optional<Address>& hop, size_t interface)
+            : route_prefix(prefix),
+            prefix_length(length),
+            next_hop(hop),
+            interface_num(interface) {}
+
+        const uint32_t route_prefix;
+        const uint8_t prefix_length;
+        const std::optional<Address> next_hop;
+        const size_t interface_num;
+};
+
 //! \brief A router that has multiple network interfaces and
 //! performs longest-prefix-match routing between them.
 class Router {
@@ -48,6 +121,8 @@ class Router {
     //! as specified by the route with the longest prefix_length that matches the
     //! datagram's destination address.
     void route_one_datagram(InternetDatagram &dgram);
+
+    std::vector<Route_item> _router_table{};
 
   public:
     //! Add an interface to the router

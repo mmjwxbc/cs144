@@ -5,7 +5,7 @@
             "name": "cs144",
             "type": "cppdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/build/tests/${fileBasenameNoExtension}",
+            "program": "${workspaceFolder}/build/apps/${fileBasenameNoExtension}",
             "args": ["stanford.edu", "/class/cs144"],
             "stopAtEntry": false,
             "cwd": "${fileDirname}",
